@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auralyx - Web Player</title>
+  <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+  <h1>Auralyx - Web Player</h1>
+  <form id="searchForm">
+      <input type="text" id="query" name="query" placeholder="Search for audio" required>
+      <button type="submit">Search</button>
+  </form>
+  <div id="searchResults"></div>
+
+  <!-- About Section -->
+  <div id="aboutSection">
+      <a href="https://t.me/yukiiiasahina" target="_blank">Made with love ❤️<br>©2025 Yuki</a>
+  </div>
+
+  <script>
+    document.getElementById('searchForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        const query = document.getElementById('query').value.trim();
+        if (query) {
+            fetch('/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'query=' + encodeURIComponent(query)
+            })
+            .then(response => response.json())
+            .then(data => {
+                const searchResultsDiv = document.getElementById('searchResults');
+                searchResultsDiv.innerHTML = '';
+                const resultsToShow = data.slice(0, 10);
+                resultsToShow.forEach(function(result) {
+                    const videoDiv = document.createElement('div');
+                    videoDiv.classList.add('search-result');
+                    videoDiv.addEventListener('click', function() {
+                        playAudio(result.url, result.title, result.thumbnail, videoDiv);
+                    });
+                    videoDiv.innerHTML = `
+                        <img src="${result.thumbnail}" alt="Thumbnail">
+                        <div class="info">
+                            <div class="title">${result.title}</div>
+                            <div class="description">${result.channelName}</div>
+                            <div class="error-message" style="display:none;"></div>
+                            <div class="progress-container">
+                                <div class="progress-indicator">
+                                    <div class="progress-bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    searchResultsDiv.appendChild(videoDiv);
+                });
+            });
+        } else {
+            alert("Please enter a search query.");
+        }
+    });
+
+    function playAudio(url, title, thumbnail, resultDiv) {
+        fetch('/get_audio_info', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'url=' + encodeURIComponent(url)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Failed to fetch audio information");
+            }
+            return response.json();
+        })
+        .then(data => {
+            const audioControlsDiv = resultDiv.querySelector('.audio-controls');
+            const errorMessageDiv = resultDiv.querySelector('.error-message');
+            const progressContainer = resultDiv.querySelector('.progress-container');
+            const progressBar = resultDiv.querySelector('.progress-indicator .progress-bar');
+
+            let audioElement;
+
+            if (audioControlsDiv) {
+                audioElement = audioControlsDiv.querySelector('audio');
+            } else {
+                const newAudioControls = `
+                    <div class="audio-controls">
+                        <audio style="display: none;"></audio>
+                    </div>
+                `;
+                resultDiv.insertAdjacentHTML('beforeend', newAudioControls);
+                audioElement = resultDiv.querySelector('audio');
+                audioElement.src = data.url;
+            }
+
+            audioElement.addEventListener('loadedmetadata', () => {
+                progressContainer.style.display = "block";
+            });
+
+            audioElement.addEventListener('timeupdate', () => {
+                if (audioElement.duration) {
+                    const progress = (audioElement.currentTime / audioElement.duration) * 100;
+                    progressBar.style.width = `${progress}%`;
+                }
+            });
+
+            audioElement.addEventListener('error', () => {
+                errorMessageDiv.textContent = "Audio load failed. Please check the source.";
+                errorMessageDiv.style.display = "block";
+            });
+
+            const progressIndicator = resultDiv.querySelector('.progress-indicator');
+            progressIndicator.addEventListener('click', function(event) {
+                const rect = this.getBoundingClientRect();
+                const clickPosition = event.clientX - rect.left;
+                const percentage = clickPosition / rect.width;
+                audioElement.currentTime = audioElement.duration * percentage;
+            });
+
+            if (audioElement.paused) {
+                audioElement.play().catch(error => {
+                    errorMessageDiv.textContent = "Playback failed. Please try again.";
+                    errorMessageDiv.style.display = "block";
+                });
+            } else {
+                audioElement.pause();
+            }
+        })
+        .catch(error => {
+            const errorMessageDiv = resultDiv.querySelector('.error-message');
+            errorMessageDiv.textContent = "Failed to load audio: " + error.message;
+            errorMessageDiv.style.display = "block";
+        });
+    }
+  </script>
+</body>
+</html>
